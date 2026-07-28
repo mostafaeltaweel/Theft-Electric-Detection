@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Electricity Theft Detection using Explainable AI (ETD-XAI)
 
 ⚡ **Enterprise Real-Time Grid Surveillance & Anomaly Detection System**
