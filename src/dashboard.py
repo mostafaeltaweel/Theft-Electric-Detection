@@ -3,6 +3,7 @@ Enterprise Dashboard Module for ETD.
 Reads 100% directly from SQLite database via SQL aggregation queries for sub-100ms rendering.
 Provides isolated dataset upload management via src/upload_manager.py.
 """
+import math
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,7 +13,8 @@ import plotly.express as px
 from src.config import (
     COLOR_PRIMARY, COLOR_CYAN, COLOR_SUCCESS, COLOR_DANGER, COLOR_WARNING,
     CHART_LINE_NORMAL, CHART_FILL_NORMAL, CHART_LINE_DANGER, CHART_FILL_DANGER,
-    CHART_GRIDLINE, COLOR_TEXT_MUTED
+    CHART_GRIDLINE, COLOR_TEXT_MUTED,
+    DATA_START_DATE, DAYS_PER_MONTH, DAYS_PER_QUARTER, DAYS_PER_YEAR
 )
 from src.database import (
     get_dashboard_kpis, 
@@ -24,6 +26,45 @@ from src.database import (
 )
 from src.upload_manager import process_user_uploaded_file, get_recent_uploads, export_results_to_excel
 from src.utils import render_kpi_card, render_metric_box
+
+def aggregate_series(daily_values, level: str):
+    """Aggregates per-day average kWh values into Week/Month/Quarter/Year SUMS.
+
+    The day1..day120 columns are treated as a real date column: day1 maps to
+    DATA_START_DATE (src/config.py) and every subsequent day column is one
+    calendar day later. Every month is fixed at exactly 30 days (not a
+    variable-length Gregorian month), so quarters are 90 days and years are
+    360 days (12 x 30), per project convention. Change DATA_START_DATE in
+    config.py if the real collection start date is known.
+    """
+    n = len(daily_values)
+    dates = pd.date_range(start=DATA_START_DATE, periods=n, freq="D")
+
+    if level == "Day":
+        return [d.strftime("%d %b %Y") for d in dates], list(daily_values)
+
+    bucket_size = {"Week": 7, "Month": DAYS_PER_MONTH, "Quarter": DAYS_PER_QUARTER, "Year": DAYS_PER_YEAR}[level]
+    n_buckets = math.ceil(n / bucket_size)
+
+    labels, sums = [], []
+    for b in range(n_buckets):
+        start = b * bucket_size
+        end = min(start + bucket_size, n)
+        sums.append(float(np.sum(daily_values[start:end])))
+        block_start_date = dates[start]
+
+        if level == "Week":
+            labels.append(f"W{b + 1} ({block_start_date.strftime('%d %b')})")
+        elif level == "Month":
+            labels.append(block_start_date.strftime("%b %Y"))
+        elif level == "Quarter":
+            quarter_num = (b % 4) + 1
+            labels.append(f"Q{quarter_num} {block_start_date.year}")
+        else:  # Year
+            labels.append(str(block_start_date.year))
+
+    return labels, sums
+
 
 def render_dashboard_page():
     """Renders the high-performance enterprise dashboard."""
@@ -55,20 +96,35 @@ def render_dashboard_page():
         col_left, col_right = st.columns([7, 5])
 
         with col_left:
-            st.markdown("<div class='section-header'>Average Daily Consumption Trend</div>", unsafe_allow_html=True)
+            header_col, selector_col = st.columns([3, 2])
+            with header_col:
+                st.markdown("<div class='section-header'>Average Daily Consumption Trend</div>", unsafe_allow_html=True)
+            with selector_col:
+                agg_level = st.selectbox(
+                    "Aggregation",
+                    ["Day", "Week", "Month", "Quarter", "Year"],
+                    index=0,
+                    key="trend_agg_level",
+                    label_visibility="collapsed"
+                )
 
             normal_avg, theft_avg, n_days = get_consumption_profiles_sql()
-            days = [f"Day {i+1}" for i in range(n_days)]
+
+            # Aggregate (sum) both series according to the selected period —
+            # Day returns the raw values unchanged; Week/Month/Quarter/Year sum
+            # the daily averages into that period's total.
+            x_labels, normal_agg = aggregate_series(normal_avg, agg_level)
+            _, theft_agg = aggregate_series(theft_avg, agg_level)
 
             fig_line = go.Figure()
             fig_line.add_trace(go.Scatter(
-                x=days, y=normal_avg, mode='lines', name='Normal Customers',
+                x=x_labels, y=normal_agg, mode='lines', name='Normal Customers',
                 line=dict(color=CHART_LINE_NORMAL, width=3, shape='spline'),
                 fill='tozeroy', fillcolor=CHART_FILL_NORMAL,
                 hovertemplate='<b>Normal</b>: %{y:.2f} kWh<extra></extra>'
             ))
             fig_line.add_trace(go.Scatter(
-                x=days, y=theft_avg, mode='lines', name='Theft Customers',
+                x=x_labels, y=theft_agg, mode='lines', name='Theft Customers',
                 line=dict(color=CHART_LINE_DANGER, width=3, shape='spline'),
                 hovertemplate='<b>Theft</b>: %{y:.2f} kWh<extra></extra>'
             ))
@@ -77,9 +133,10 @@ def render_dashboard_page():
                 font=dict(color=COLOR_TEXT_MUTED, family='Inter', size=13),
                 margin=dict(l=10, r=10, t=10, b=10),
                 height=380,
+                transition=dict(duration=400, easing='cubic-in-out'),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=12)),
                 xaxis=dict(showgrid=False, tickfont=dict(size=10), color=COLOR_TEXT_MUTED),
-                yaxis=dict(showgrid=True, gridcolor=CHART_GRIDLINE, tickfont=dict(size=11), title="kWh", color=COLOR_TEXT_MUTED)
+                yaxis=dict(showgrid=True, gridcolor=CHART_GRIDLINE, tickfont=dict(size=11), title="Energy Consumption (kWh)", color=COLOR_TEXT_MUTED)
             )
             st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': False})
 
@@ -206,28 +263,6 @@ def render_dashboard_page():
                         render_metric_box("F1 Score", f"{m['f1_score']:.4f}", accent_color=COLOR_WARNING)
                     with em5:
                         render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)
-
-                # -----------------------------------------------------------
-                # Chart: distribution of predicted status in the uploaded file
-                # -----------------------------------------------------------
-                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-                st.markdown("<div class='section-header'>Predicted Class Distribution (This Upload)</div>", unsafe_allow_html=True)
-                status_counts = res["df_results"]["status"].value_counts().reset_index()
-                status_counts.columns = ["Status", "Count"]
-                fig_upload_bar = px.bar(
-                    status_counts, x="Status", y="Count", color="Status", text="Count",
-                    color_discrete_map={"Theft": CHART_LINE_DANGER, "Normal": CHART_LINE_NORMAL}
-                )
-                fig_upload_bar.update_traces(textposition="outside")
-                fig_upload_bar.update_layout(
-                    paper_bgcolor='#ffffff', plot_bgcolor='#ffffff',
-                    font=dict(color=COLOR_TEXT_MUTED, family='Inter', size=13),
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=320, showlegend=False,
-                    xaxis=dict(showgrid=False, tickfont=dict(size=12)),
-                    yaxis=dict(showgrid=True, gridcolor=CHART_GRIDLINE, tickfont=dict(size=11))
-                )
-                st.plotly_chart(fig_upload_bar, use_container_width=True, config={'displayModeBar': False})
 
                 st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
                 st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
