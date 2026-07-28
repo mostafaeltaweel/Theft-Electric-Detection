@@ -73,3 +73,15 @@ CHART_GRIDLINE = "#eef0f3"
 SEQUENCE_LENGTH = 120
 N_STAT_FEATURES = 59
 DEFAULT_THRESHOLD = 0.5
+
+# ------------------------------------------------------------
+# Synthetic calendar mapping for the day1..day120 columns.
+# The dataset only carries a day index (day1, day2, ...), not real dates,
+# so we anchor it to a fixed start date and treat every month as exactly
+# 30 days (not a variable-length calendar month) per project requirements.
+# Change DATA_START_DATE if the real collection start date is known.
+# ------------------------------------------------------------
+DATA_START_DATE = "2024-01-01"
+DAYS_PER_MONTH = 30
+DAYS_PER_QUARTER = DAYS_PER_MONTH * 3   # 90
+DAYS_PER_YEAR = DAYS_PER_MONTH * 12     # 360 (12 x 30-day months, not 365)
