@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+#<<<<<<< HEAD
 streamlit>=1.28.0
 tensorflow>=2.10.0
 keras>=2.10.0
@@ -8,7 +8,7 @@ scipy>=1.9.0
 scikit-learn>=1.1.0
 plotly>=5.15.0
 openpyxl>=3.0.0
-=======
+#=======
 # Core app — pinned for a reliable Streamlit Community Cloud build.
 # numpy<2 is required by TensorFlow 2.16.x.
 streamlit>=1.36,<2
@@ -25,4 +25,4 @@ reportlab>=4.0
 # (real model gradients) if SHAP is not installed, so it is intentionally left
 # out here to keep the cloud build fast and dependency-light. To enable SHAP,
 # add a line:  shap==0.46.0
->>>>>>> d959e6117143d12dce4fa9ddee1271bf9bdff3b3
+#>>>>>>> d959e6117143d12dce4fa9ddee1271bf9bdff3b3
