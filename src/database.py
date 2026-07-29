@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS consumers (
     risk_score REAL,
     risk_level TEXT,
     status TEXT,
+    source TEXT DEFAULT 'system',
+    upload_id INTEGER,
     created_at TEXT,
     updated_at TEXT
 );
@@ -93,11 +95,24 @@ def init_db():
         if cols and "updated_at" not in cols:
             conn.execute("DROP TABLE consumers;")
             conn.executescript(_DDL)
-            
+            cursor = conn.execute("PRAGMA table_info(consumers);")
+            cols = [r["name"] for r in cursor.fetchall()]
+
+        # Additive migration ONLY (never drops/recomputes existing data):
+        # adds 'source' and 'upload_id' so uploaded consumers can later be
+        # told apart from the original system-seeded dataset and safely
+        # deleted without ever touching source='system' rows.
+        if "source" not in cols:
+            conn.execute("ALTER TABLE consumers ADD COLUMN source TEXT DEFAULT 'system';")
+        if "upload_id" not in cols:
+            conn.execute("ALTER TABLE consumers ADD COLUMN upload_id INTEGER;")
+
         # Create High-Performance Indexes
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cons_no ON consumers(CONS_NO);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_consumers_flag ON consumers(FLAG);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_consumers_pred ON consumers(prediction);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_consumers_source ON consumers(source);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_consumers_upload_id ON consumers(upload_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_up_pred_upload_id ON uploaded_predictions(upload_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_up_pred_cust ON uploaded_predictions(customer_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_cust ON prediction_history(customer_id);")
@@ -296,3 +311,87 @@ def get_system_db_meta() -> Dict[str, Any]:
         "db_size": db_size,
         "last_sync": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
+
+# ---------------------------------------------------------
+# Upload → Consumers Merge (so Dashboard KPIs, charts, and Consumer
+# Search immediately reflect uploaded data — no separate/hidden table)
+# ---------------------------------------------------------
+def upsert_consumers_from_upload(records: List[Tuple], upload_id: int) -> None:
+    """Inserts NEW consumers or UPDATES existing ones (matched by CONS_NO) in
+    the main 'consumers' table using data from an uploaded file.
+
+    Every row written this way is tagged source='upload' and upload_id=<id>,
+    so it can be identified and safely deleted later via
+    delete_consumers_by_upload() WITHOUT ever touching the original
+    system-seeded dataset (source='system').
+
+    `records` is a list of tuples in this exact order:
+    (CONS_NO, FLAG, readings_json, avg_cons, total_cons, zero_days,
+     probability, prediction, risk_score, risk_level, status)
+    """
+    now_str = datetime.now().isoformat()
+    with get_db() as conn:
+        for rec in records:
+            (cons_no, flag, readings_json, avg_cons, total_cons, zero_days,
+             probability, prediction, risk_score, risk_level, status) = rec
+            conn.execute(
+                """INSERT INTO consumers
+                   (CONS_NO, FLAG, readings_json, avg_cons, total_cons, zero_days,
+                    probability, prediction, risk_score, risk_level, status,
+                    source, upload_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?)
+                   ON CONFLICT(CONS_NO) DO UPDATE SET
+                       FLAG = excluded.FLAG,
+                       readings_json = excluded.readings_json,
+                       avg_cons = excluded.avg_cons,
+                       total_cons = excluded.total_cons,
+                       zero_days = excluded.zero_days,
+                       probability = excluded.probability,
+                       prediction = excluded.prediction,
+                       risk_score = excluded.risk_score,
+                       risk_level = excluded.risk_level,
+                       status = excluded.status,
+                       source = 'upload',
+                       upload_id = excluded.upload_id,
+                       updated_at = excluded.updated_at;
+                """,
+                (cons_no, flag, readings_json, avg_cons, total_cons, zero_days,
+                 probability, prediction, risk_score, risk_level, status,
+                 upload_id, now_str, now_str)
+            )
+
+
+def get_uploadable_batches(limit: int = 20) -> pd.DataFrame:
+    """Lists uploads that currently have live rows merged into 'consumers'
+    (i.e. eligible for deletion) — used by the Delete Uploaded Data UI."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT u.upload_id as 'Upload ID', u.file_name as 'File Name',
+                      COUNT(c.id) as 'Active Records', u.upload_date as 'Date'
+               FROM uploads u
+               LEFT JOIN consumers c ON c.upload_id = u.upload_id AND c.source = 'upload'
+               GROUP BY u.upload_id
+               HAVING COUNT(c.id) > 0
+               ORDER BY u.upload_id DESC LIMIT ?""", (limit,)
+        ).fetchall()
+    if not rows:
+        return pd.DataFrame(columns=["Upload ID", "File Name", "Active Records", "Date"])
+    return pd.DataFrame([dict(r) for r in rows])
+
+
+def delete_consumers_by_upload(upload_id: int) -> int:
+    """Deletes all consumer rows that came from a specific upload.
+
+    SAFETY: the WHERE clause always includes source = 'upload', so this can
+    NEVER delete rows from the original system-seeded dataset even if an
+    invalid/incorrect upload_id is passed in.
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM consumers WHERE upload_id = ? AND source = 'upload';",
+            (upload_id,)
+        )
+        deleted = cur.rowcount
+        conn.execute("DELETE FROM uploaded_predictions WHERE upload_id = ?;", (upload_id,))
+        conn.execute("UPDATE uploads SET status = 'Deleted' WHERE upload_id = ?;", (upload_id,))
+    return deleted
