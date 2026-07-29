@@ -325,6 +325,10 @@ def upsert_consumers_from_upload(records: List[Tuple], upload_id: int) -> None:
     delete_consumers_by_upload() WITHOUT ever touching the original
     system-seeded dataset (source='system').
 
+    Uses INSERT OR REPLACE (not the newer ON CONFLICT...DO UPDATE syntax)
+    for compatibility with older SQLite versions that some hosting
+    environments (e.g. Streamlit Community Cloud) may ship.
+
     `records` is a list of tuples in this exact order:
     (CONS_NO, FLAG, readings_json, avg_cons, total_cons, zero_days,
      probability, prediction, risk_score, risk_level, status)
@@ -334,30 +338,23 @@ def upsert_consumers_from_upload(records: List[Tuple], upload_id: int) -> None:
         for rec in records:
             (cons_no, flag, readings_json, avg_cons, total_cons, zero_days,
              probability, prediction, risk_score, risk_level, status) = rec
+
+            # Preserve the original created_at if this consumer already exists
+            existing = conn.execute(
+                "SELECT created_at FROM consumers WHERE CONS_NO = ?;", (cons_no,)
+            ).fetchone()
+            created_at = existing["created_at"] if existing and existing["created_at"] else now_str
+
             conn.execute(
-                """INSERT INTO consumers
+                """INSERT OR REPLACE INTO consumers
                    (CONS_NO, FLAG, readings_json, avg_cons, total_cons, zero_days,
                     probability, prediction, risk_score, risk_level, status,
                     source, upload_id, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?)
-                   ON CONFLICT(CONS_NO) DO UPDATE SET
-                       FLAG = excluded.FLAG,
-                       readings_json = excluded.readings_json,
-                       avg_cons = excluded.avg_cons,
-                       total_cons = excluded.total_cons,
-                       zero_days = excluded.zero_days,
-                       probability = excluded.probability,
-                       prediction = excluded.prediction,
-                       risk_score = excluded.risk_score,
-                       risk_level = excluded.risk_level,
-                       status = excluded.status,
-                       source = 'upload',
-                       upload_id = excluded.upload_id,
-                       updated_at = excluded.updated_at;
                 """,
                 (cons_no, flag, readings_json, avg_cons, total_cons, zero_days,
                  probability, prediction, risk_score, risk_level, status,
-                 upload_id, now_str, now_str)
+                 upload_id, created_at, now_str)
             )
 
 
