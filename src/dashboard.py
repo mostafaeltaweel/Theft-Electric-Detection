@@ -284,6 +284,44 @@ def render_dashboard_page():
                 with em5:
                     render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)
 
+                # -----------------------------------------------------------
+                # Misclassified Customers — rows where the model's prediction
+                # does NOT match the ground_truth_flag column from the upload.
+                # -----------------------------------------------------------
+                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Misclassified Customers (Model vs Ground Truth)</div>", unsafe_allow_html=True)
+
+                df_results = res["df_results"]
+                if "ground_truth_flag" in df_results.columns:
+                    mismatches = df_results[df_results["prediction"] != df_results["ground_truth_flag"]].copy()
+                    false_positives = mismatches[(mismatches["prediction"] == 1) & (mismatches["ground_truth_flag"] == 0)]
+                    false_negatives = mismatches[(mismatches["prediction"] == 0) & (mismatches["ground_truth_flag"] == 1)]
+
+                    mm1, mm2, mm3 = st.columns(3, gap="medium")
+                    with mm1:
+                        render_metric_box("Total Misclassified", f"{len(mismatches):,}", accent_color=COLOR_DANGER)
+                    with mm2:
+                        render_metric_box("False Positives (Flagged Theft, Actually Normal)", f"{len(false_positives):,}", accent_color=COLOR_WARNING)
+                    with mm3:
+                        render_metric_box("False Negatives (Missed Actual Theft)", f"{len(false_negatives):,}", accent_color=COLOR_DANGER)
+
+                    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+                    if mismatches.empty:
+                        st.success("No misclassifications — the model's predictions matched the ground truth (FLAG) on every record in this upload.")
+                    else:
+                        st.dataframe(mismatches, use_container_width=True, hide_index=True)
+                        mismatch_excel = export_results_to_excel(mismatches)
+                        st.download_button(
+                            "Export Misclassified Customers to Excel",
+                            mismatch_excel,
+                            f"upload_{res['upload_id']}_misclassified.xlsx",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_misclassified"
+                        )
+                else:
+                    st.caption("Ground truth flag column not found in results — cannot compute misclassifications.")
+
             st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
             st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
             st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
