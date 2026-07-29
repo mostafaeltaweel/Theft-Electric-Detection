@@ -243,39 +243,53 @@ def render_dashboard_page():
                 with st.spinner("Processing file, stripping FLAG for zero-leakage inference, and saving to SQLite..."):
                     res = process_user_uploaded_file(file)
 
-                st.success(f"File **{res['filename']}** processed! Created Upload ID #{res['upload_id']}.")
+                # Persist the result across the rerun below (session_state
+                # survives st.rerun()), then force a full script rerun so the
+                # Enterprise Dashboard tab re-queries SQLite from scratch and
+                # picks up the newly merged consumers automatically — no
+                # manual page refresh needed for KPIs, charts, search, or history.
+                st.session_state["last_upload_result"] = res
+                st.rerun()
 
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                u1, u2, u3 = st.columns(3, gap="medium")
-                with u1:
-                    render_metric_box("Total Records", f"{res['total_records']:,}", accent_color=COLOR_PRIMARY)
-                with u2:
-                    render_metric_box("Theft Cases", f"{res['theft_cases']:,}", accent_color=COLOR_DANGER)
-                with u3:
-                    render_metric_box("Theft Rate", f"{res['theft_rate_pct']}%", accent_color=COLOR_WARNING)
+        # Show the most recent upload's results (persisted in session_state so
+        # they survive the st.rerun() triggered right after processing above)
+        if st.session_state.get("last_upload_result"):
+            res = st.session_state["last_upload_result"]
 
-                if res["has_flag"] and res["metrics"]:
-                    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-                    st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
-                    m = res["metrics"]
-                    em1, em2, em3, em4, em5 = st.columns(5, gap="small")
-                    with em1:
-                        render_metric_box("Accuracy", f"{m['accuracy']:.4f}", accent_color=COLOR_PRIMARY)
-                    with em2:
-                        render_metric_box("Precision", f"{m['precision']:.4f}", accent_color=COLOR_CYAN)
-                    with em3:
-                        render_metric_box("Recall", f"{m['recall']:.4f}", accent_color=COLOR_SUCCESS)
-                    with em4:
-                        render_metric_box("F1 Score", f"{m['f1_score']:.4f}", accent_color=COLOR_WARNING)
-                    with em5:
-                        render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)
+            st.success(f"File **{res['filename']}** processed! Created Upload ID #{res['upload_id']}. "
+                       f"Dashboard KPIs, charts, and Consumer Search have been refreshed automatically.")
 
-                st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
-                st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
-                st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            u1, u2, u3 = st.columns(3, gap="medium")
+            with u1:
+                render_metric_box("Total Records", f"{res['total_records']:,}", accent_color=COLOR_PRIMARY)
+            with u2:
+                render_metric_box("Theft Cases", f"{res['theft_cases']:,}", accent_color=COLOR_DANGER)
+            with u3:
+                render_metric_box("Theft Rate", f"{res['theft_rate_pct']}%", accent_color=COLOR_WARNING)
 
-                excel_bytes = export_results_to_excel(res["df_results"])
-                st.download_button("Export Results to Excel", excel_bytes, f"upload_{res['upload_id']}_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            if res["has_flag"] and res["metrics"]:
+                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
+                m = res["metrics"]
+                em1, em2, em3, em4, em5 = st.columns(5, gap="small")
+                with em1:
+                    render_metric_box("Accuracy", f"{m['accuracy']:.4f}", accent_color=COLOR_PRIMARY)
+                with em2:
+                    render_metric_box("Precision", f"{m['precision']:.4f}", accent_color=COLOR_CYAN)
+                with em3:
+                    render_metric_box("Recall", f"{m['recall']:.4f}", accent_color=COLOR_SUCCESS)
+                with em4:
+                    render_metric_box("F1 Score", f"{m['f1_score']:.4f}", accent_color=COLOR_WARNING)
+                with em5:
+                    render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)
+
+            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
+            st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
+
+            excel_bytes = export_results_to_excel(res["df_results"])
+            st.download_button("Export Results to Excel", excel_bytes, f"upload_{res['upload_id']}_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         st.markdown("<div class='section-header'>Uploaded Datasets History (uploads table)</div>", unsafe_allow_html=True)
