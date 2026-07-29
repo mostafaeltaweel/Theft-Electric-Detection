@@ -84,8 +84,17 @@ def get_db():
     finally:
         conn.close()
 
-def init_db():
-    """Initializes multi-table schema, creates indexes, and performs vectorized pre-computation ONCE."""
+def ensure_schema():
+    """Creates tables/indexes if missing and runs additive column migrations.
+
+    This is intentionally CHEAP (a handful of PRAGMA/ALTER/CREATE INDEX
+    statements) and is called EVERY time init_db() runs — and, from app.py,
+    is also called directly and unconditionally on every app start (outside
+    the @st.cache_resource-wrapped bootstrap step). This guarantees the
+    'source'/'upload_id' columns always exist before any upload is
+    processed, even if the cached bootstrap step itself doesn't re-run
+    after a deploy.
+    """
     with get_db() as conn:
         conn.executescript(_DDL)
         
@@ -129,10 +138,14 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_up_pred_cust ON uploaded_predictions(customer_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_cust ON prediction_history(customer_id);")
 
+
+def init_db():
+    """Initializes multi-table schema, creates indexes, and performs vectorized pre-computation ONCE."""
+    ensure_schema()
     _seed_system_dataset_once()
 
 def _seed_system_dataset_once():
-    """Imports system dataset (Test 2.xlsx) & runs CNN-LSTM model ONCE on first startup."""
+    """Imports system dataset (Book4-7-4months.csv) & runs CNN-LSTM model ONCE on first startup."""
     with get_db() as conn:
         count = conn.execute("SELECT COUNT(*) as cnt FROM consumers;").fetchone()["cnt"]
         if count > 0:
