@@ -203,8 +203,10 @@ def render_dashboard_page():
                     )
 
                     fig_ind = go.Figure()
+                    ind_dates = pd.date_range(start=DATA_START_DATE, periods=len(readings), freq="D")
+                    ind_x_labels = [d.strftime("%d %b %Y") for d in ind_dates]
                     fig_ind.add_trace(go.Scatter(
-                        x=days, y=readings, mode='lines+markers', name=selected_cid,
+                        x=ind_x_labels, y=readings, mode='lines+markers', name=selected_cid,
                         line=dict(color=CHART_LINE_DANGER if row["prediction"] == 1 else CHART_LINE_NORMAL, width=3),
                         marker=dict(size=5)
                     ))
