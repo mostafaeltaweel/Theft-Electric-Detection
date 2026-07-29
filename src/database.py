@@ -132,7 +132,7 @@ def init_db():
     _seed_system_dataset_once()
 
 def _seed_system_dataset_once():
-    """Imports system dataset (Book4-7-4months.csv) & runs CNN-LSTM model ONCE on first startup."""
+    """Imports system dataset (Test 2.xlsx) & runs CNN-LSTM model ONCE on first startup."""
     with get_db() as conn:
         count = conn.execute("SELECT COUNT(*) as cnt FROM consumers;").fetchone()["cnt"]
         if count > 0:
