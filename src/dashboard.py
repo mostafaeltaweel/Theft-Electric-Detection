@@ -22,7 +22,9 @@ from src.database import (
     get_consumer_by_id, 
     get_all_consumer_ids, 
     get_recent_prediction_history,
-    get_system_db_meta
+    get_system_db_meta,
+    get_uploadable_batches,
+    delete_consumers_by_upload
 )
 from src.upload_manager import process_user_uploaded_file, get_recent_uploads, export_results_to_excel
 from src.utils import render_kpi_card, render_metric_box
@@ -34,8 +36,7 @@ def aggregate_series(daily_values, level: str):
     DATA_START_DATE (src/config.py) and every subsequent day column is one
     calendar day later. Every month is fixed at exactly 30 days (not a
     variable-length Gregorian month), so quarters are 90 days and years are
-    360 days (12 x 30), per project convention. Change DATA_START_DATE in
-    config.py if the real collection start date is known.
+    360 days (12 x 30), per project convention.
     """
     n = len(daily_values)
     dates = pd.date_range(start=DATA_START_DATE, periods=n, freq="D")
@@ -228,7 +229,10 @@ def render_dashboard_page():
 
     with tab_upload:
         st.markdown("<div class='section-header'>Upload Custom Dataset File (CSV / Excel)</div>", unsafe_allow_html=True)
-        st.caption("Uploaded files are stored in `uploaded_predictions` table without modifying official system `consumers` table.")
+        st.caption("Uploaded records are merged into the main `consumers` table (new CONS_NO → inserted, existing CONS_NO → updated), "
+                    "so they immediately appear in the Enterprise Dashboard KPIs, charts, and Consumer Search. "
+                    "Each record is tagged with its Upload ID so it can be removed later from the 'Delete Uploaded Data' section below "
+                    "without ever affecting the original system dataset.")
 
         file = st.file_uploader("Upload dataset file", type=["csv", "xlsx"])
 
@@ -275,3 +279,35 @@ def render_dashboard_page():
         st.markdown("<div class='section-header'>Uploaded Datasets History (uploads table)</div>", unsafe_allow_html=True)
         recent_uploads_df = get_recent_uploads()
         st.dataframe(recent_uploads_df, use_container_width=True, hide_index=True)
+
+        # ---------------------------------------------------------
+        # Delete Uploaded Data — safe, easy removal.
+        # Only lists batches that currently have live rows merged into
+        # 'consumers' (source='upload'). The original system dataset never
+        # appears here and can never be deleted through this control.
+        # ---------------------------------------------------------
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>Delete Uploaded Data</div>", unsafe_allow_html=True)
+
+        deletable_df = get_uploadable_batches()
+        if deletable_df.empty:
+            st.caption("No uploaded data currently in the system.")
+        else:
+            st.dataframe(deletable_df, use_container_width=True, hide_index=True)
+
+            del_col1, del_col2 = st.columns([3, 1])
+            with del_col1:
+                selected_upload_id = st.selectbox(
+                    "Select an Upload ID to remove",
+                    deletable_df["Upload ID"].tolist(),
+                    key="delete_upload_select"
+                )
+            with del_col2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                confirm_delete = st.button("Delete This Upload", type="secondary", use_container_width=True)
+
+            if confirm_delete:
+                deleted_count = delete_consumers_by_upload(selected_upload_id)
+                st.success(f"Removed {deleted_count:,} consumer record(s) from Upload ID #{selected_upload_id}. "
+                           f"The Dashboard, KPIs, and Consumer Search will reflect this immediately.")
+                st.rerun()
