@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 st.set_page_config(
-    page_title="ETD",
+    page_title="ETD-XAI Enterprise",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -19,7 +19,7 @@ st.set_page_config(
 
 from src.config import MODEL_PATH, BASE_DIR
 from src.utils import inject_custom_css
-from src.database import init_db
+from src.database import init_db, ensure_schema
 from src.model_loader import load_active_model, is_model_loaded
 from src.dashboard import render_dashboard_page
 
@@ -156,6 +156,12 @@ if "app_entered" not in st.session_state:
 if not st.session_state.app_entered:
     render_landing_page()
     st.stop()
+
+# Schema migration is cheap (a few PRAGMA/ALTER/CREATE INDEX checks) and is
+# run UNCACHED on every single app start — this guarantees new columns like
+# 'source'/'upload_id' always exist before any upload is processed, even if
+# the cached bootstrap step below doesn't re-run after a deploy.
+ensure_schema()
 
 # Boot Database & Model ONCE (only needed once the user is inside the app)
 @st.cache_resource(show_spinner="Booting SQLite Database & CNN-LSTM Model Engine...")
