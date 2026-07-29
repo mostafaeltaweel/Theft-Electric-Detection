@@ -9,7 +9,6 @@ from src.config import (
     TINT_PRIMARY, TINT_CYAN, TINT_SUCCESS, TINT_DANGER, TINT_WARNING,
 )
 
-# Map an accent color to its matching pastel tint background.
 _ACCENT_TO_TINT = {
     COLOR_PRIMARY: TINT_PRIMARY,
     COLOR_CYAN: TINT_CYAN,
@@ -23,7 +22,6 @@ def inject_custom_css():
     """Injects a clean, light, low-contrast, large-type CSS theme into Streamlit."""
     css = f"""
     <style>
-    /* Main Background & Fonts — base size bumped up for readability */
     html {{ font-size: 17px; }}
     .stApp {{
         background: {COLOR_BG};
@@ -39,7 +37,25 @@ def inject_custom_css():
         backdrop-filter: blur(10px) !important;
     }}
 
-    /* Section / hero container */
+    /* ============================================================
+       Centered, max-width page container — reduces the "everything
+       stretched too wide / lots of empty space" look on large screens
+       ============================================================ */
+    .block-container {{
+        max-width: 1500px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        padding-top: 5.5rem !important;   /* clears the fixed nav bar below */
+    }}
+    @media (max-width: 1600px) {{
+        .block-container {{ max-width: 96% !important; }}
+    }}
+    @media (max-width: 900px) {{
+        .block-container {{ padding-left: 1rem !important; padding-right: 1rem !important; }}
+    }}
+
     .glass-card {{
         background: {COLOR_CARD};
         border: 1px solid {COLOR_BORDER};
@@ -49,7 +65,7 @@ def inject_custom_css():
         box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
     }}
 
-    /* KPI Metric Cards — soft pastel tint, tight spacing (no wasted space), large value */
+    /* KPI Metric Cards — tight spacing, large value, no wasted height */
     .kpi-card {{
         border-radius: 12px;
         padding: 16px 20px;
@@ -76,7 +92,6 @@ def inject_custom_css():
         margin-top: 6px;
     }}
 
-    /* Status Badges */
     .badge-status {{
         display: inline-flex;
         align-items: center;
@@ -86,23 +101,10 @@ def inject_custom_css():
         font-size: 0.82rem;
         font-weight: 600;
     }}
-    .badge-success {{
-        background: {TINT_SUCCESS};
-        color: {COLOR_SUCCESS};
-        border: 1px solid rgba(76, 175, 125, 0.25);
-    }}
-    .badge-danger {{
-        background: {TINT_DANGER};
-        color: {COLOR_DANGER};
-        border: 1px solid rgba(224, 118, 122, 0.25);
-    }}
-    .badge-primary {{
-        background: {TINT_PRIMARY};
-        color: {COLOR_PRIMARY};
-        border: 1px solid rgba(91, 127, 219, 0.25);
-    }}
+    .badge-success {{ background: {TINT_SUCCESS}; color: {COLOR_SUCCESS}; border: 1px solid rgba(76, 175, 125, 0.25); }}
+    .badge-danger  {{ background: {TINT_DANGER};  color: {COLOR_DANGER};  border: 1px solid rgba(224, 118, 122, 0.25); }}
+    .badge-primary {{ background: {TINT_PRIMARY}; color: {COLOR_PRIMARY}; border: 1px solid rgba(91, 127, 219, 0.25); }}
 
-    /* Action Card Tiles */
     .action-tile {{
         background: {COLOR_CARD};
         border: 1px solid {COLOR_BORDER};
@@ -112,17 +114,9 @@ def inject_custom_css():
         cursor: pointer;
         transition: all 0.2s ease;
     }}
-    .action-tile:hover {{
-        border-color: {COLOR_PRIMARY};
-        box-shadow: 0 2px 8px rgba(91, 127, 219, 0.12);
-    }}
-    .action-label {{
-        font-weight: 600;
-        color: {COLOR_TEXT};
-        font-size: 0.95rem;
-    }}
+    .action-tile:hover {{ border-color: {COLOR_PRIMARY}; box-shadow: 0 2px 8px rgba(91, 127, 219, 0.12); }}
+    .action-label {{ font-weight: 600; color: {COLOR_TEXT}; font-size: 0.95rem; }}
 
-    /* Table Styling */
     div[data-testid="stDataFrame"] {{
         background: {COLOR_CARD};
         border-radius: 10px;
@@ -130,7 +124,6 @@ def inject_custom_css():
         font-size: 1rem;
     }}
 
-    /* Section headers used across the dashboard */
     .section-header {{
         font-size: 1.25rem;
         font-weight: 700;
@@ -139,65 +132,59 @@ def inject_custom_css():
     }}
 
     /* ============================================================
-       Tabs — large, box-style, no-emoji navigation, FIXED at top.
-       IMPORTANT: only the tab-list (the row of buttons) is fixed here —
-       NOT the outer stTabs wrapper, which also contains the tab panel
-       (the actual page content). Fixing the outer wrapper by mistake
-       freezes the whole page instead of just the button row.
+       Navigation Bar (st.tabs) — full-width, fixed at top, shadow,
+       bottom border, active-tab highlight, generous side padding.
+       IMPORTANT: only the tab-list (button row) is fixed — NOT the
+       tab-panel (page content), which must scroll normally.
        ============================================================ */
-    .block-container {{
-        padding-top: 6.5rem !important;
-    }}
     div[data-testid="stTabs"] div[data-baseweb="tab-list"] {{
         position: fixed;
-        top: 3.2rem;              /* sits just below Streamlit's own header bar */
+        top: 0;
         left: 0;
         right: 0;
         z-index: 999;
-        background: {COLOR_BG};
-        padding: 10px 5rem 10px 5rem;  /* nudge the 5rem values if the bar doesn't
-                                           line up with your content's side margins */
-        width: auto;
+        display: flex;
+        gap: 0;
         margin: 0;
+        background: {COLOR_CARD};
+        border-bottom: 1px solid {COLOR_BORDER};
+        box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+        padding: 0 2.5rem;
     }}
-    /* The panel below the fixed bar must NOT be fixed — let it scroll normally */
     div[data-testid="stTabs"] div[data-baseweb="tab-panel"] {{
         position: relative;
     }}
-    div[data-testid="stTabs"] div[data-baseweb="tab-list"] {{
-        gap: 0;
-        border-bottom: 2px solid {COLOR_BORDER};
-        width: 100%;
-    }}
     div[data-testid="stTabs"] button[data-baseweb="tab"] {{
-        flex: 1 1 0;
-        height: 64px;
-        padding: 0 24px;
-        border-radius: 12px 12px 0 0;
-        background-color: {COLOR_CARD};
+        flex: 0 0 auto;
+        height: 58px;
+        padding: 0 28px;
+        background-color: transparent;
         color: {COLOR_TEXT_MUTED};
-        font-weight: 700;
-        font-size: 1.15rem;
-        border: 1px solid {COLOR_BORDER};
-        border-bottom: none;
-        margin-right: 4px;
-        transition: background-color 0.15s ease, color 0.15s ease;
+        font-weight: 600;
+        font-size: 1.05rem;
+        border: none;
+        border-bottom: 3px solid transparent;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }}
     div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {{
         background-color: {TINT_PRIMARY};
         color: {COLOR_PRIMARY};
     }}
     div[data-testid="stTabs"] button[aria-selected="true"] {{
-        background-color: {TINT_PRIMARY};
         color: {COLOR_PRIMARY};
+        border-bottom: 3px solid {COLOR_PRIMARY};
+        background-color: {TINT_PRIMARY};
     }}
     div[data-testid="stTabs"] div[data-baseweb="tab-highlight"] {{
-        background-color: {COLOR_PRIMARY};
-        height: 3px;
+        display: none;   /* replaced by the border-bottom on the active button above */
     }}
     div[data-testid="stTabs"] button[data-baseweb="tab"] p {{
-        font-size: 1.15rem;
-        font-weight: 700;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }}
+    @media (max-width: 900px) {{
+        div[data-testid="stTabs"] div[data-baseweb="tab-list"] {{ padding: 0 1rem; }}
+        div[data-testid="stTabs"] button[data-baseweb="tab"] {{ padding: 0 16px; font-size: 0.95rem; }}
     }}
     </style>
     """
