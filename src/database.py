@@ -102,10 +102,22 @@ def init_db():
         # adds 'source' and 'upload_id' so uploaded consumers can later be
         # told apart from the original system-seeded dataset and safely
         # deleted without ever touching source='system' rows.
+        # Wrapped defensively: if Streamlit Cloud spins up more than one
+        # session/worker at boot, two processes can race to run this ALTER
+        # at the same time — the loser fails with "duplicate column name",
+        # which is harmless (the column already exists) and safe to ignore.
         if "source" not in cols:
-            conn.execute("ALTER TABLE consumers ADD COLUMN source TEXT DEFAULT 'system';")
+            try:
+                conn.execute("ALTER TABLE consumers ADD COLUMN source TEXT DEFAULT 'system';")
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
         if "upload_id" not in cols:
-            conn.execute("ALTER TABLE consumers ADD COLUMN upload_id INTEGER;")
+            try:
+                conn.execute("ALTER TABLE consumers ADD COLUMN upload_id INTEGER;")
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
 
         # Create High-Performance Indexes
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cons_no ON consumers(CONS_NO);")
@@ -360,19 +372,30 @@ def upsert_consumers_from_upload(records: List[Tuple], upload_id: int) -> None:
 
 def get_uploadable_batches(limit: int = 20) -> pd.DataFrame:
     """Lists uploads that currently have live rows merged into 'consumers'
-    (i.e. eligible for deletion) — used by the Delete Uploaded Data UI."""
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT u.upload_id as 'Upload ID', u.file_name as 'File Name',
-                      COUNT(c.id) as 'Active Records', u.upload_date as 'Date'
-               FROM uploads u
-               LEFT JOIN consumers c ON c.upload_id = u.upload_id AND c.source = 'upload'
-               GROUP BY u.upload_id
-               HAVING COUNT(c.id) > 0
-               ORDER BY u.upload_id DESC LIMIT ?""", (limit,)
-        ).fetchall()
+    (i.e. eligible for deletion) — used by the Delete Uploaded Data UI.
+
+    Wrapped in try/except so that if this specific query ever fails (e.g. an
+    older SQLite build, or a fresh DB that hasn't been migrated yet), the
+    rest of the dashboard still renders instead of crashing the whole app.
+    """
+    empty_df = pd.DataFrame(columns=["Upload ID", "File Name", "Active Records", "Date"])
+    try:
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT u.upload_id AS "Upload ID", u.file_name AS "File Name",
+                          COUNT(c.id) AS "Active Records", u.upload_date AS "Date"
+                   FROM uploads u
+                   LEFT JOIN consumers c ON c.upload_id = u.upload_id AND c.source = 'upload'
+                   GROUP BY u.upload_id
+                   HAVING COUNT(c.id) > 0
+                   ORDER BY u.upload_id DESC LIMIT ?""", (limit,)
+            ).fetchall()
+    except sqlite3.OperationalError as e:
+        print(f"[Database Warning] get_uploadable_batches failed (non-fatal): {e}")
+        return empty_df
+
     if not rows:
-        return pd.DataFrame(columns=["Upload ID", "File Name", "Active Records", "Date"])
+        return empty_df
     return pd.DataFrame([dict(r) for r in rows])
 
 
@@ -383,12 +406,16 @@ def delete_consumers_by_upload(upload_id: int) -> int:
     NEVER delete rows from the original system-seeded dataset even if an
     invalid/incorrect upload_id is passed in.
     """
-    with get_db() as conn:
-        cur = conn.execute(
-            "DELETE FROM consumers WHERE upload_id = ? AND source = 'upload';",
-            (upload_id,)
-        )
-        deleted = cur.rowcount
-        conn.execute("DELETE FROM uploaded_predictions WHERE upload_id = ?;", (upload_id,))
-        conn.execute("UPDATE uploads SET status = 'Deleted' WHERE upload_id = ?;", (upload_id,))
-    return deleted
+    try:
+        with get_db() as conn:
+            cur = conn.execute(
+                "DELETE FROM consumers WHERE upload_id = ? AND source = 'upload';",
+                (upload_id,)
+            )
+            deleted = cur.rowcount
+            conn.execute("DELETE FROM uploaded_predictions WHERE upload_id = ?;", (upload_id,))
+            conn.execute("UPDATE uploads SET status = 'Deleted' WHERE upload_id = ?;", (upload_id,))
+        return deleted
+    except sqlite3.OperationalError as e:
+        print(f"[Database Warning] delete_consumers_by_upload failed: {e}")
+        return 0
