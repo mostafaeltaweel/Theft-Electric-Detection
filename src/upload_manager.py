@@ -4,12 +4,13 @@ Manages user uploaded datasets, stores predictions in uploaded_predictions table
 prevents FLAG data leakage, and computes evaluation metrics when ground truth is supplied.
 """
 import io
+import json
 from datetime import datetime
 from typing import Dict, Any, Tuple, Optional
 import pandas as pd
 import numpy as np
 
-from src.database import get_db
+from src.database import get_db, upsert_consumers_from_upload
 from src.predictor import predict_sequences, classify
 
 def process_user_uploaded_file(file, user_id: str = "Administrator") -> Dict[str, Any]:
@@ -61,8 +62,12 @@ def process_user_uploaded_file(file, user_id: str = "Administrator") -> Dict[str
     # 3. Run CNN-LSTM Model Inference (Pure features, NO FLAG)
     probs = predict_sequences(readings_mat)
     
-    # 4. Save results to 'uploaded_predictions' table
+    # 4. Save results to 'uploaded_predictions' table (unchanged — kept as
+    #    the audit/history record of this upload) AND merge into the main
+    #    'consumers' table so the Enterprise Dashboard, KPIs, charts, and
+    #    Consumer Search immediately reflect the uploaded data.
     db_records = []
+    consumer_records = []
     ui_results = []
     
     now_ts = datetime.now().isoformat()
@@ -70,6 +75,7 @@ def process_user_uploaded_file(file, user_id: str = "Administrator") -> Dict[str
     for i in range(n_rows):
         cls = classify(float(probs[i]))
         gt_flag = ground_truth_flags[i] if has_flag else None
+        row_readings = readings_mat[i]
         
         db_records.append((
             upload_id,
@@ -80,6 +86,22 @@ def process_user_uploaded_file(file, user_id: str = "Administrator") -> Dict[str
             cls["status"],
             gt_flag,
             now_ts
+        ))
+
+        # (CONS_NO, FLAG, readings_json, avg_cons, total_cons, zero_days,
+        #  probability, prediction, risk_score, risk_level, status)
+        consumer_records.append((
+            ids[i],
+            gt_flag,
+            json.dumps(row_readings.tolist()),
+            float(np.mean(row_readings)),
+            float(np.sum(row_readings)),
+            int(np.sum(row_readings == 0.0)),
+            cls["probability"],
+            cls["prediction"],
+            cls["risk_score"],
+            cls["risk_level"],
+            cls["status"],
         ))
         
         item = {
@@ -103,6 +125,11 @@ def process_user_uploaded_file(file, user_id: str = "Administrator") -> Dict[str
         )
         # Update upload status
         conn.execute("UPDATE uploads SET status = 'Completed' WHERE upload_id = ?;", (upload_id,))
+
+    # Merge into 'consumers' (INSERT if CONS_NO is new, UPDATE if it already
+    # exists) — tagged source='upload' so it can be found and safely deleted
+    # later without ever touching the original system dataset.
+    upsert_consumers_from_upload(consumer_records, upload_id)
 
     res_df = pd.DataFrame(ui_results)
     
