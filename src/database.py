@@ -261,10 +261,10 @@ def get_consumer_by_id(cons_no: str) -> Dict[str, Any]:
     d["readings"] = json.loads(d["readings_json"]) if d.get("readings_json") else []
     return d
 
-def get_all_consumer_ids(limit: int = None) -> List[str]:   #limit: int = 500
+def get_all_consumer_ids(limit: int = 500) -> List[str]:
     """Indexed SQL query (<20ms) to fetch customer ID list."""
     with get_db() as conn:
-        rows = conn.execute("SELECT CONS_NO FROM consumers LIMIT ?;"), (limit,)).fetchall()  #
+        rows = conn.execute("SELECT CONS_NO FROM consumers LIMIT ?;", (limit,)).fetchall()
     return [r["CONS_NO"] for r in rows]
 
 def get_recent_prediction_history(limit: int = 5) -> pd.DataFrame:
