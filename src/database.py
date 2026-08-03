@@ -230,8 +230,8 @@ def get_dashboard_kpis() -> Dict[str, Any]:
 def get_consumption_profiles_sql() -> Tuple[List[float], List[float], int]:
     """Fetches sequence vectors from SQLite to build average consumption profiles."""
     with get_db() as conn:
-        normal_rows = conn.execute("SELECT readings_json FROM consumers WHERE prediction = 0 LIMIT 500;").fetchall()
-        theft_rows = conn.execute("SELECT readings_json FROM consumers WHERE prediction = 1 LIMIT 500;").fetchall()
+        normal_rows = conn.execute("SELECT readings_json FROM consumers WHERE prediction = 0 LIMIT 99999;").fetchall()
+        theft_rows = conn.execute("SELECT readings_json FROM consumers WHERE prediction = 1 LIMIT 99999;").fetchall()
         
     def _avg_matrix(rows):
         if not rows:
@@ -261,7 +261,7 @@ def get_consumer_by_id(cons_no: str) -> Dict[str, Any]:
     d["readings"] = json.loads(d["readings_json"]) if d.get("readings_json") else []
     return d
 
-def get_all_consumer_ids(limit: int = 500) -> List[str]:
+def get_all_consumer_ids(limit: int = 99999) -> List[str]:
     """Indexed SQL query (<20ms) to fetch customer ID list."""
     with get_db() as conn:
         rows = conn.execute("SELECT CONS_NO FROM consumers LIMIT ?;", (limit,)).fetchall()
