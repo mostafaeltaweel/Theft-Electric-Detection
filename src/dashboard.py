@@ -305,11 +305,12 @@ def render_dashboard_page():
                     with mm3:
                         render_metric_box("False Negatives (Missed Actual Theft)", f"{len(false_negatives):,}", accent_color=COLOR_DANGER)
 
-                    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+                    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
                     if mismatches.empty:
                         st.success("No misclassifications — the model's predictions matched the ground truth (FLAG) on every record in this upload.")
                     else:
+                        st.markdown("<div class='section-header'>Misclassified Records List</div>", unsafe_allow_html=True)
                         st.dataframe(mismatches, use_container_width=True, hide_index=True)
                         mismatch_excel = export_results_to_excel(mismatches)
                         st.download_button(
@@ -322,17 +323,24 @@ def render_dashboard_page():
                 else:
                     st.caption("Ground truth flag column not found in results — cannot compute misclassifications.")
 
-            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
-            st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
-            st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
+            # ---------------------------------------------------------------
+            # Prediction Results Table — HIDDEN FROM DISPLAY per request
+            # (there's already a similar/duplicate table kept elsewhere).
+            # The underlying data (res["df_results"]) is still fully computed
+            # above and used for the Misclassified Customers section, so
+            # nothing else in the app is affected by hiding this display.
+            # ---------------------------------------------------------------
+            #st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            #st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
+            #st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
 
-            excel_bytes = export_results_to_excel(res["df_results"])
-            st.download_button("Export Results to Excel", excel_bytes, f"upload_{res['upload_id']}_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            #excel_bytes = export_results_to_excel(res["df_results"])
+            #st.download_button("Export Results to Excel", excel_bytes, f"upload_{res['upload_id']}_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>Uploaded Datasets History (uploads table)</div>", unsafe_allow_html=True)
-        recent_uploads_df = get_recent_uploads()
-        st.dataframe(recent_uploads_df, use_container_width=True, hide_index=True)
+        #st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        #st.markdown("<div class='section-header'>Uploaded Datasets History (uploads table)</div>", unsafe_allow_html=True)
+        #recent_uploads_df = get_recent_uploads()
+        #st.dataframe(recent_uploads_df, use_container_width=True, hide_index=True)
 
         # ---------------------------------------------------------
         # Delete Uploaded Data — safe, easy removal.
