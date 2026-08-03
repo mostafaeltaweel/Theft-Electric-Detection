@@ -168,7 +168,7 @@ def render_dashboard_page():
         # ---------------------------------------------------------
         st.markdown("<div class='section-header'>Consumer Search</div>", unsafe_allow_html=True)
 
-        c_list = get_all_consumer_ids(limit=None)
+        c_list = get_all_consumer_ids() #limit=None
         if c_list:
             search_term = st.text_input(
                 "Type a Consumer ID to search",
