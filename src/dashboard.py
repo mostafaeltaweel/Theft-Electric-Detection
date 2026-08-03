@@ -323,8 +323,8 @@ def render_dashboard_page():
                     st.caption("Ground truth flag column not found in results — cannot compute misclassifications.")
 
             #st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
-            st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
-            st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
+            #st.markdown("<div class='section-header'>Prediction Results Table</div>", unsafe_allow_html=True)
+            #st.dataframe(res["df_results"], use_container_width=True, hide_index=True)
 
             #excel_bytes = export_results_to_excel(res["df_results"])
             st.download_button("Export Results to Excel", excel_bytes, f"upload_{res['upload_id']}_results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
