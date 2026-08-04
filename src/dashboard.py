@@ -270,7 +270,7 @@ def render_dashboard_page():
 
             if res["has_flag"] and res["metrics"]:
                 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-                st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
+                #st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
                 m = res["metrics"]
                 '''em1, em2, em3, em4, em5 = st.columns(5, gap="small")
                 with em1:
