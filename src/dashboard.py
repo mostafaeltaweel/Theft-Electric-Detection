@@ -268,11 +268,11 @@ def render_dashboard_page():
             with u3:
                 render_metric_box("Theft Rate", f"{res['theft_rate_pct']}%", accent_color=COLOR_WARNING)
 
-           ''' if res["has_flag"] and res["metrics"]:
+            if res["has_flag"] and res["metrics"]:
                 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
                 st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
                 m = res["metrics"]
-                em1, em2, em3, em4, em5 = st.columns(5, gap="small")
+                '''em1, em2, em3, em4, em5 = st.columns(5, gap="small")
                 with em1:
                     render_metric_box("Accuracy", f"{m['accuracy']:.4f}", accent_color=COLOR_PRIMARY)
                 with em2:
