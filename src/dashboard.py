@@ -268,7 +268,7 @@ def render_dashboard_page():
             with u3:
                 render_metric_box("Theft Rate", f"{res['theft_rate_pct']}%", accent_color=COLOR_WARNING)
 
-            if res["has_flag"] and res["metrics"]:
+           ''' if res["has_flag"] and res["metrics"]:
                 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
                 st.markdown("<div class='section-header'>Model Evaluation Metrics (Ground Truth Comparison)</div>", unsafe_allow_html=True)
                 m = res["metrics"]
@@ -282,7 +282,7 @@ def render_dashboard_page():
                 with em4:
                     render_metric_box("F1 Score", f"{m['f1_score']:.4f}", accent_color=COLOR_WARNING)
                 with em5:
-                    render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)
+                    render_metric_box("ROC-AUC", f"{(m['roc_auc'] or 0):.4f}", accent_color=COLOR_DANGER)'''
 
                 # -----------------------------------------------------------
                 # Misclassified Customers — rows where the model's prediction
